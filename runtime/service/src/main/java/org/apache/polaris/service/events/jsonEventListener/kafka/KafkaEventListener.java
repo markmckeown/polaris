@@ -72,7 +72,7 @@ public class KafkaEventListener implements PolarisEventListener {
     props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, this.bootStrapServers);
     props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, UUIDSerializer.class.getName());
     props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-    this.producer = new KafkaProducer<UUID, String>(props);
+    this.producer = new KafkaProducer<>(props);
   }
 
   @PreDestroy
@@ -85,7 +85,8 @@ public class KafkaEventListener implements PolarisEventListener {
 
   @Override
   public void onEvent(PolarisEvent event) {
-    LOGGER.info("Got event {}", event.type());
+    LOGGER.info("Got event '{}', sending to topic '{}' using synchronous mode: '{}'.",
+        event.type(), topic, synchronousMode);
 
     HashMap<String, Object> properties = new HashMap<>();
     properties.put("event_type", event.type().name());
@@ -114,7 +115,6 @@ public class KafkaEventListener implements PolarisEventListener {
         .ifPresent(
             p -> {
               properties.put("principal", p.getName());
-              properties.put("activated_roles", p.getRoles());
             });
     event.metadata().requestId().ifPresent(id -> properties.put("request_id", id));
 
@@ -123,7 +123,6 @@ public class KafkaEventListener implements PolarisEventListener {
       eventAsJson = objectMapper.writeValueAsString(properties);
     } catch (JsonProcessingException e) {
       LOGGER.error("Error processing event into JSON string: ", e);
-      LOGGER.debug("Failed to convert the following object into JSON string: {}", properties);
       return;
     }
 
@@ -131,7 +130,7 @@ public class KafkaEventListener implements PolarisEventListener {
     if (synchronousMode) {
       try {
         RecordMetadata recordMetadata = producer.send(record).get();
-        LOGGER.debug("Sent PolarisEvent {} to Kafka topic {} at offset {}", event.type(), topic, recordMetadata.offset());
+        LOGGER.info("Sent PolarisEvent {} to Kafka topic {} at offset {}", event.type(), topic, recordMetadata.offset());
       } catch (Exception exception) {
         LOGGER.error("Failed to send PolarisEvent to Kafka topic {}", topic, exception);
       }
@@ -140,7 +139,7 @@ public class KafkaEventListener implements PolarisEventListener {
         if (exception != null) {
           LOGGER.error("Failed to send PolarisEvent to Kafka topic {}", topic, exception);
         } else {
-          LOGGER.debug("Sent PolarisEvent {} to Kafka topic {} at offset {}", event.type(), topic, metadata.offset());
+          LOGGER.info("Sent PolarisEvent {} to Kafka topic {}", event.type(), topic);
         }
       });
     }
