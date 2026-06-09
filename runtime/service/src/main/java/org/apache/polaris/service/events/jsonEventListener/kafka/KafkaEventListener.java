@@ -25,7 +25,10 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.rest.requests.CreateTableRequest;
+import org.apache.iceberg.rest.requests.RenameTableRequest;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -34,6 +37,7 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.serialization.UUIDSerializer;
 import org.apache.polaris.service.events.EventAttributes;
 import org.apache.polaris.service.events.PolarisEvent;
+import org.apache.polaris.service.events.PolarisEventType;
 import org.apache.polaris.service.events.listeners.PolarisEventListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -90,6 +94,26 @@ public class KafkaEventListener implements PolarisEventListener {
 
     HashMap<String, Object> properties = new HashMap<>();
     properties.put("event_type", event.type().name());
+
+    event
+        .attributes()
+        .get(EventAttributes.RENAME_TABLE_REQUEST)
+        .map(RenameTableRequest::destination)
+        .ifPresent(destination -> properties.put("destination", destination.toString()));
+    event
+        .attributes()
+        .get(EventAttributes.RENAME_TABLE_REQUEST)
+        .map(RenameTableRequest::source)
+        .ifPresent(source -> properties.put("source", source.toString()));
+    event
+        .attributes()
+        .get(EventAttributes.TABLE_NAME)
+        .ifPresent(name -> properties.put("table_name", name));
+    event
+        .attributes()
+        .get(EventAttributes.NAMESPACE)
+        .map(Namespace::toString)
+        .ifPresent(namespace -> properties.put("namespace", namespace));
     event
         .attributes()
         .get(EventAttributes.TABLE_IDENTIFIER)
@@ -100,6 +124,10 @@ public class KafkaEventListener implements PolarisEventListener {
         .get(EventAttributes.VIEW_IDENTIFIER)
         .map(TableIdentifier::toString)
         .ifPresent(id -> properties.put("view_identifier", id));
+    event
+        .attributes()
+        .get(EventAttributes.VIEW_NAME)
+        .ifPresent(name -> properties.put("view_name", name));
     event
         .attributes()
         .get(EventAttributes.NAMESPACE_NAME)
