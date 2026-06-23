@@ -91,7 +91,7 @@ dependencies {
   implementation(platform(libs.google.cloud.storage.bom))
   implementation("com.google.cloud:google-cloud-storage")
   implementation(platform(libs.awssdk.bom))
-  implementation("org.apache.kafka:kafka-clients:3.7.0")
+  implementation("org.apache.kafka:kafka-clients:4.3.0")
   implementation("software.amazon.awssdk:sts")
   implementation("software.amazon.awssdk:iam-policy-builder")
   implementation("software.amazon.awssdk:s3")

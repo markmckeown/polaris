@@ -24,18 +24,13 @@ import io.smallrye.config.WithDefault;
 import io.smallrye.config.WithName;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import java.util.Map;
+
 /** Configuration interface for the Kafka Event Listener. */
 @StaticInitSafe
 @ConfigMapping(prefix = "polaris.event-listener.kafka")
 @ApplicationScoped
 public interface KafkaEventListenerConfiguration {
-
-  /**
-   * The Kafka bootstrap servers string.
-   */
-  @WithName("bootstrap-servers")
-  @WithDefault("localhost:9092")
-  String bootstrapServers();
 
   /**
    * The Kafka topic to send Polaris events to.
@@ -58,4 +53,11 @@ public interface KafkaEventListenerConfiguration {
   @WithName("synchronous-mode")
   @WithDefault("false")
   boolean synchronousMode();
+
+   /**
+    * Kafka properties to pass to the Kafka producer.
+    * This can be used to configure authentication (e.g., SASL, SSL) or other producer properties,
+    * for example bootstrap.servers is required.
+    */
+   Map<String, String> properties();
 }

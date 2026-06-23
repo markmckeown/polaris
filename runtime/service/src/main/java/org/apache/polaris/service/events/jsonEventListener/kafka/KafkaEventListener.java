@@ -27,7 +27,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.rest.requests.CreateTableRequest;
 import org.apache.iceberg.rest.requests.RenameTableRequest;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -37,12 +36,12 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.serialization.UUIDSerializer;
 import org.apache.polaris.service.events.EventAttributes;
 import org.apache.polaris.service.events.PolarisEvent;
-import org.apache.polaris.service.events.PolarisEventType;
 import org.apache.polaris.service.events.listeners.PolarisEventListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -58,22 +57,22 @@ public class KafkaEventListener implements PolarisEventListener {
   private final String topic;
   private final boolean synchronousMode;
   private final ObjectMapper objectMapper;
-  private final String bootStrapServers;
+  private final Map<String, String> kafkaProperties;
 
   @Inject
   public KafkaEventListener(KafkaEventListenerConfiguration configuration,
                             ObjectMapper objectMapper) {
-    this.bootStrapServers = configuration.bootstrapServers();
     this.synchronousMode = configuration.synchronousMode();
     this.topic = configuration.topic();
     this.objectMapper = objectMapper;
+    this.kafkaProperties = new HashMap<>(configuration.properties());
   }
 
   @PostConstruct
   void start() {
-    LOGGER.info("Starting KafkaEventListener");
+    LOGGER.debug("Starting KafkaEventListener.");
     Properties props = new Properties();
-    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, this.bootStrapServers);
+    props.putAll(this.kafkaProperties);
     props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, UUIDSerializer.class.getName());
     props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
     this.producer = new KafkaProducer<>(props);
@@ -89,85 +88,84 @@ public class KafkaEventListener implements PolarisEventListener {
 
   @Override
   public void onEvent(PolarisEvent event) {
-    LOGGER.info("Got event '{}', sending to topic '{}' using synchronous mode: '{}'.",
-        event.type(), topic, synchronousMode);
-
-    HashMap<String, Object> properties = new HashMap<>();
-    properties.put("event_type", event.type().name());
+    HashMap<String, Object> eventProperties = new HashMap<>();
+    eventProperties.put("event_type", event.type().name());
 
     event
         .attributes()
         .get(EventAttributes.RENAME_TABLE_REQUEST)
         .map(RenameTableRequest::destination)
-        .ifPresent(destination -> properties.put("destination", destination.toString()));
+        .ifPresent(destination -> eventProperties.put("destination", destination.toString()));
     event
         .attributes()
         .get(EventAttributes.RENAME_TABLE_REQUEST)
         .map(RenameTableRequest::source)
-        .ifPresent(source -> properties.put("source", source.toString()));
+        .ifPresent(source -> eventProperties.put("source", source.toString()));
     event
         .attributes()
         .get(EventAttributes.TABLE_NAME)
-        .ifPresent(name -> properties.put("table_name", name));
+        .ifPresent(name -> eventProperties.put("table_name", name));
     event
         .attributes()
         .get(EventAttributes.NAMESPACE)
         .map(Namespace::toString)
-        .ifPresent(namespace -> properties.put("namespace", namespace));
+        .ifPresent(namespace -> eventProperties.put("namespace", namespace));
     event
         .attributes()
         .get(EventAttributes.TABLE_IDENTIFIER)
         .map(TableIdentifier::toString)
-        .ifPresent(id -> properties.put("table_identifier", id));
+        .ifPresent(id -> eventProperties.put("table_identifier", id));
     event
         .attributes()
         .get(EventAttributes.VIEW_IDENTIFIER)
         .map(TableIdentifier::toString)
-        .ifPresent(id -> properties.put("view_identifier", id));
+        .ifPresent(id -> eventProperties.put("view_identifier", id));
     event
         .attributes()
         .get(EventAttributes.VIEW_NAME)
-        .ifPresent(name -> properties.put("view_name", name));
+        .ifPresent(name -> eventProperties.put("view_name", name));
     event
         .attributes()
         .get(EventAttributes.NAMESPACE_NAME)
-        .ifPresent(id -> properties.put("namespace_name", id));
+        .ifPresent(id -> eventProperties.put("namespace_name", id));
     event
         .attributes()
         .get(EventAttributes.CATALOG_NAME)
-        .ifPresent(id -> properties.put("catalog_name", id));
-    properties.put("realm_id", event.metadata().realmId());
+        .ifPresent(id -> eventProperties.put("catalog_name", id));
+    eventProperties.put("realm_id", event.metadata().realmId());
     event
         .metadata()
         .user()
         .ifPresent(
             p -> {
-              properties.put("principal", p.getName());
+              eventProperties.put("principal", p.getName());
             });
-    event.metadata().requestId().ifPresent(id -> properties.put("request_id", id));
+    event.metadata().requestId().ifPresent(id -> eventProperties.put("request_id", id));
 
     String eventAsJson;
     try {
-      eventAsJson = objectMapper.writeValueAsString(properties);
+      eventAsJson = objectMapper.writeValueAsString(eventProperties);
     } catch (JsonProcessingException e) {
       LOGGER.error("Error processing event into JSON string: ", e);
       return;
     }
 
-    ProducerRecord<UUID, String> record = new ProducerRecord<>(topic, event.metadata().eventId(), eventAsJson);
+    ProducerRecord<UUID, String> record = new ProducerRecord<>(topic, event.metadata().eventId(),
+        eventAsJson);
     if (synchronousMode) {
       try {
         RecordMetadata recordMetadata = producer.send(record).get();
-        LOGGER.info("Sent PolarisEvent {} to Kafka topic {} at offset {}", event.type(), topic, recordMetadata.offset());
+        LOGGER.debug("Sent event {} to Kafka topic {} at offset {}", event.type(),
+            topic, recordMetadata.offset());
       } catch (Exception exception) {
-        LOGGER.error("Failed to send PolarisEvent to Kafka topic {}", topic, exception);
+        LOGGER.error("Failed to send event.", exception);
       }
     } else {
       var unused = producer.send(record, (metadata, exception) -> {
         if (exception != null) {
-          LOGGER.error("Failed to send PolarisEvent to Kafka topic {}", topic, exception);
+          LOGGER.error("Failed to send PolarisEvent to kafka", exception);
         } else {
-          LOGGER.info("Sent PolarisEvent {} to Kafka topic {}", event.type(), topic);
+          LOGGER.debug("Sent PolarisEvent {} to Kafka topic {}", event.type(), topic);
         }
       });
     }
