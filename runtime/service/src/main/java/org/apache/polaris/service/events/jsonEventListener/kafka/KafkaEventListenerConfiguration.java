@@ -55,9 +55,10 @@ public interface KafkaEventListenerConfiguration {
   boolean synchronousMode();
 
    /**
-    * Kafka properties to pass to the Kafka producer.
-    * This can be used to configure authentication (e.g., SASL, SSL) or other producer properties,
-    * for example bootstrap.servers is required.
+    * Kafka properties to pass to the Kafka producer, for example
+    * bootstap.servers.
+    * This can be used to configure authentication (e.g., SASL, SSL)
+    * or other producer properties.
     */
    Map<String, String> properties();
 }

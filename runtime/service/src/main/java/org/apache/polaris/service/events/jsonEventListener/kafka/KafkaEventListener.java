@@ -46,7 +46,7 @@ import java.util.Properties;
 import java.util.UUID;
 
 /**
- * Event Listener that pushes Apache Polaris Table events to a Kafka topic.
+ * Event Listener that pushes Polaris events to Kafka.
  */
 @ApplicationScoped
 @Identifier("kafka")
